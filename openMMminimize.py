@@ -95,7 +95,7 @@ def load_and_minimize(topFile, groFile, steps,
     integrator = mm.LangevinIntegrator(
         temperature * u.kelvin, 
         friction / u.picosecond, 
-        timestep * u.nanometer)
+        timestep * u.femtosecond)
     
     simulation = run_minimize(top, system, integrator, tolerance, steps, writeSteps, pdbFile)
     
