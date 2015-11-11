@@ -1,3 +1,5 @@
+import os
+import sys
 # Import for openmm
 import simtk.openmm as mm
 from simtk.openmm import app
@@ -13,7 +15,8 @@ Modules needed:
     ParmEd - available at http://github.com/ParmEd/ParmEd
 """
 
-def run_minimize(top, system, integrator, tolerance, steps, writeSteps = 0, pdbFile = "output.pdb"):
+def run_minimize(top, system, integrator, tolerance, Platform, maxIt):
+
     """
     Runs a openmm minimization on an input system and topology. 
     input:
@@ -21,38 +24,31 @@ def run_minimize(top, system, integrator, tolerance, steps, writeSteps = 0, pdbF
         system = ParmEd or openmm system created from top
         integrator = openmm integrator with assigned parameters
         tolerance = float, energy tolerance in kJ/mol
-        steps = integer, number of steps the minimization should take
-        writeSteps = integer (0), frequency to write coordinates to pdb file
-        pdbFile = string ('output.pdb'), file to save steps
-    
+        Platform = openMM platform 
+        maxIt = integer, max number of iterations in the minimization, if zero it will continue until it reaches the tolerance specified.
+
     output:
-        returns openmm simulation in the conditions after it has been run. Outputs pdb file of trajectory if writeSteps > 0.
+        returns openmm simulation in the conditions after it has been run. 
     """
     # Build simulation
-    print "Assigning simulation parameters..."
-    simulation = app.Simulation(top.topology, system, integrator)
-    print "Setting positions in simulation..."
+    print "\tAssigning simulation parameters..."
+    simulation = app.Simulation(top.topology, system, integrator, Platform)
+    print "\tSetting positions in simulation..."
     simulation.context.setPositions(top.positions)
-    print "Assigning minimization to simulation ..."
-    simulation.minimizeEnergy(tolerance = tolerance)
-    if writeSteps > 0:
-        print "Assigning conditions for writing trajectory..."
-        simulation.reporters.append(app.PDBReporter(pdbFile, writeSteps))
-
-    # Running minimization
-    print "OpenMM Minimization is running..."
-    simulation.step(steps)
+    print "\tMinimizing system..." 
+    simulation.minimizeEnergy(tolerance = tolerance * u.kilojoule_per_mole, maxIterations = maxIt)
+    
     return simulation 
 
-def load_and_minimize(topFile, groFile, steps,
+def load_and_minimize(topFile, groFile, maxIt,
         output = "output.gro",
+        EnTol = 10.0,
         temperature = 300.0, 
-        friction = 0.3, 
+        friction = 1.0, 
         timestep = 2.0,
         cutOff = 1.2,
-        writeSteps = 0,
-        tolerance = 2.0,
-        pdbFile = "output.pdb"):
+        IntTol = 0.00001,
+        platform = 'CPU'):
 
     """
     Performs a minimization using openmm on GROMACS input files and returns the ParmEd system with the input topology and the minimized coordinates. 
@@ -60,57 +56,78 @@ def load_and_minimize(topFile, groFile, steps,
     input:
         topFile = string, GROMACS .top topology file
         groFile = string, GROMACS .gro coordinate file
-        steps = integer, number of steps the minimization should take
+        maxIt = integer, maximum number of steps the minimization should take. If zero it will continue to minimize until it reaches the specified tolerance
         output = ("output.gro") string, GROMACS .gro coordinate file
+        EnTol = (10.0) float, energy tolerance in kJ/mol 
         temperature = (300.) float, temperature in kelvin
-        friction = (0.3) float, friction in inverse picoseconds
+        friction = (1.0) float, friction in inverse picoseconds
         timestep = (2.0) float, size of each step in femtoseconds
         cutOff = (1.2) float, nonbondedCutoff in nanometers
-        writeSteps = (0) integer, if non-zero write coordinates to file
-        tolerance = (2.0) float, energy tolerance in kJ/mol 
-        pdbFile = ("output.pdb") string, where to writeSteps
+        IntTol = (0.00001) float, fraction of a distance within which constraints are maintained in the openMM integrator. 
+        platform = ('CPU') string, openMM name for the platform you are running on.
 
     output:
         returns top, openmm/parmEd system with coordinates after minimization
         outputs GROMACS coordinate file with final positions
-        optionally outputs pdb file with trajectory of minimization
     """
-    print "Beginning minimization with openMM: "
+    print "Checking status of input files..."
+    if not os.path.isfile(topFile):
+        topologyFileError = Exception("Topology file not found please check the path was entered correctly")
+        raise topologyFileError
+    if not os.path.isfile(groFile):
+        coordinateFileError = Exception("Coordinate file was not found, please check the path was entered correctly")
+        raise coordinateFileError
+    
+    print "Files found! openMM setup and minimization: "
 
     # Load .gro and .top files into parmed
-    print "Loading %s and %s into ParmEd..." % (topFile, groFile)
-    top = parmed.load_file(topFile)
-    gro = parmed.load_file(groFile)
-    print "Assign gro box to the topology..."
+    print "\tLoading %s and %s into ParmEd..." % (topFile, groFile)
+    try:
+        top = parmed.load_file(topFile)
+    except:
+        ParmEdTopologyError = Exception("ParmEd could not load your topology file, please check the ParmEd documentation at https://parmed.github.io/ParmEd for more information")
+        raise ParmEdTopologyError
+    try:
+        gro = parmed.load_file(groFile)
+    except:
+        ParmEdCoordinateError = Exception("ParmEd could not load your coordinate file, please check the ParmEd documentation at https://parmed.github.io/ParmEd for more information")
+        raise ParmEdCoordinateError
+
+    print "\tAssign coordinates to the topology..."
     top.box = gro.box
     top.positions = gro.positions
 
     # Make openmm system
-    print "Creating system in openMM..."
+    print "\tCreating system in openMM..."
     system = top.createSystem(
         nonbondedMethod = app.PME, 
         nonbondedCutoff = cutOff * u.nanometer, 
         constraints = app.HBonds)
-    print "Creating integrator..."
+    print "\tCreating integrator..."
     integrator = mm.LangevinIntegrator(
         temperature * u.kelvin, 
         friction / u.picosecond, 
         timestep * u.femtosecond)
-    
-    simulation = run_minimize(top, system, integrator, tolerance, steps, writeSteps, pdbFile)
+    integrator.setConstraintTolerance(IntTol)
+
+    print "\tAssigning platform:", platform
+    Platform = mm.Platform.getPlatformByName(platform)
+    simulation = run_minimize(top, system, integrator, EnTol, Platform, maxIt)
     
     # Save Final positions
-    print "Saving final positions of OpenMM Minimization to %s ... " % output
+    print "\tSaving final positions of OpenMM Minimization to %s ... " % output
     top.positions = simulation.context.getState(getPositions=True).getPositions()
-    parmed.gromacs.GromacsGroFile.write(top, output)
+    try:
+        parmed.gromacs.GromacsGroFile.write(top, output)
+    except:
+        "ParmEd could not could not write the file coordinates to %s, this module writes out to a GROMACS .gro coordinate file, please check the ParmEd documentation at https://parmed.github.io/ParmEd for more information" % output)
 
-    print "OpenMM minimization complete"
+    print "Returning the miminimized system as ParmEd system: ",top
     return top
 
 # From the command line
 if __name__ == '__main__':
     from optparse import OptionParser
-    import os
     parser = OptionParser(usage = "This takes a GROMACS topology and coordinate file and runs an openmm minimization. It outputs a new GROMACS coordinate file with the resulting minimization. It can optionally output a PDB file with the trajectory of the minimization.")
 
     parser.add_option('-t', '--top',
@@ -121,15 +138,21 @@ if __name__ == '__main__':
             help = "REQUIRED! GROMACS coordinate file, must end in .gro or an error will be raised.",
             dest = 'gro')
 
-    parser.add_option('-n','--steps',
-            help = "REQUIRED! integer, the number of steps the minimization should take",
+    parser.add_option('-n','--maxIt',
+            help = "REQUIRED! integer, max number of iterations in the minimization, if zero it will continue until it reaches the tolerance specified.",
             type = "int",
-            dest = 'steps')
+            dest = 'maxIt')
 
     parser.add_option('-o','--output',
             default = 'output.gro',
             help = "output file, GROMACS coordinate file for minimization results",
             dest = 'output')
+
+    parser.add_option('-l', '--EnTol',
+            default = 10.0,
+            help = "float, energy tolerance in kJ/mol",
+            type = "float",
+            dest = 'EnTol')
 
     parser.add_option('-k', '--temp',
             default = 300.0,
@@ -145,7 +168,7 @@ if __name__ == '__main__':
 
     parser.add_option('-s','--timestep',
             default = 2.0,
-            help = "float, time for each step in femtoseconds",
+            help = "float, time for each step in femtoseconds for integrator",
             type = "float",
             dest = 'timestep')
 
@@ -155,46 +178,27 @@ if __name__ == '__main__':
             type = "float",
             dest = 'cutOff')
 
-    parser.add_option('-w', '--write',
-            default = 0,
-            help = "integer, if non-zero frequency for writing trajectory to pdb",
-            type = 'int',
-            dest = 'writeSteps')
-
-    parser.add_option('-l', '--tolerance',
-            default = 2.0,
-            help = "float, energy tolerance in kJ/mol",
+    parser.add_option('-d','--IntTol',
+            default = 0.00001,
+            help = "float, fraction of a distance within which constraints are maintained in the openMM integrator",
             type = "float",
-            dest = 'tolerance')
+            dest = 'IntTol')
 
-    parser.add_option('-p', '--pdb',
-            help = "file name for pdb, if write is non-zero this is required!",
-            dest = 'pdbFile')
+    parser.add_option('-p','--platform',
+            default = 'CPU',
+            help = "string, openMM name for the platform you are using",
+            dest = 'platform')
 
     (opt, args) = parser.parse_args()
 
     if opt.top == None:
         parser.error("ERROR: No topology file was provided")
-    elif not os.path.isfile(opt.top):
-        parser.error("ERROR: topology file not found.")
-    elif opt.top.split('.')[1] != 'top':
-        parser.error("ERROR: topology file must be a GROMACS .top file, extension incorrect")
 
     if opt.gro == None:
         parser.error("ERROR: No coordinate file was provided")
-    elif not os.path.isfile(opt.gro):
-        parser.error("ERROR: coordinate file not found.")
-    elif opt.gro.split('.')[1] != 'gro':
-        parser.error("ERROR: coordinate file must be a GROMACS .gro file, extension incorrect")
 
-    if opt.steps == None:
-        parser.error("ERROR: Number of steps was not provided and is required")
+    if opt.maxIt == None:
+        parser.error("ERROR: Max iterations was not provided and is required")
 
-    if opt.pdbFile == None and opt.writeSteps > 0:
-        parser.error("ERROR: if you want to write the trajectory with frequency write, you must provide a pdb file name")
-
-    if opt.pdbFile != None and opt.writeSteps == 0:
-        print "WARNING: you provided a pdb file name, but the frequency for writing the trajectory was zero, no pdb file will be created."
-
-    load_and_minimize(opt.top, opt.gro, opt.steps, opt.output, opt.temperature, opt.friction, opt.timestep, opt.cutOff, opt.writeSteps, opt.tolerance, opt.pdbFile)
+    load_and_minimize(opt.top, opt.gro, opt.maxIt, opt.output, opt.EnTol, opt.temperature, opt.friction, opt.timestep, opt.cutOff, opt.IntTol, opt.platform)
     
