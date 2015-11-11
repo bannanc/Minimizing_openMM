@@ -120,7 +120,7 @@ def load_and_minimize(topFile, groFile, maxIt,
     try:
         parmed.gromacs.GromacsGroFile.write(top, output)
     except:
-        "ParmEd could not could not write the file coordinates to %s, this module writes out to a GROMACS .gro coordinate file, please check the ParmEd documentation at https://parmed.github.io/ParmEd for more information" % output)
+        print "ParmEd could not could not write the file coordinates to %s, this module writes out to a GROMACS .gro coordinate file, please check the ParmEd documentation at https://parmed.github.io/ParmEd for more information" % output
 
     print "Returning the miminimized system as ParmEd system: ",top
     return top
