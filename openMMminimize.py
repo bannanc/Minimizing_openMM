@@ -15,7 +15,7 @@ Modules needed:
     ParmEd - available at http://github.com/ParmEd/ParmEd
 """
 
-def run_minimize(top, system, integrator, tolerance, Platform, maxIt):
+def run_minimize(top, system, integrator, tolerance, maxIt):
 
     """
     Runs a openmm minimization on an input system and topology. 
@@ -24,7 +24,6 @@ def run_minimize(top, system, integrator, tolerance, Platform, maxIt):
         system = ParmEd or openmm system created from top
         integrator = openmm integrator with assigned parameters
         tolerance = float, energy tolerance in kJ/mol
-        Platform = openMM platform 
         maxIt = integer, max number of iterations in the minimization, if zero it will continue until it reaches the tolerance specified.
 
     output:
@@ -32,7 +31,7 @@ def run_minimize(top, system, integrator, tolerance, Platform, maxIt):
     """
     # Build simulation
     print "\tAssigning simulation parameters..."
-    simulation = app.Simulation(top.topology, system, integrator, Platform)
+    simulation = app.Simulation(top.topology, system, integrator)
     print "\tSetting positions in simulation..."
     simulation.context.setPositions(top.positions)
     print "\tMinimizing system..." 
@@ -47,8 +46,7 @@ def load_and_minimize(topFile, groFile, maxIt,
         friction = 1.0, 
         timestep = 2.0,
         cutOff = 1.2,
-        IntTol = 0.00001,
-        platform = 'CPU'):
+        IntTol = 0.00001):
 
     """
     Performs a minimization using openmm on GROMACS input files and returns the ParmEd system with the input topology and the minimized coordinates. 
@@ -64,7 +62,6 @@ def load_and_minimize(topFile, groFile, maxIt,
         timestep = (2.0) float, size of each step in femtoseconds
         cutOff = (1.2) float, nonbondedCutoff in nanometers
         IntTol = (0.00001) float, fraction of a distance within which constraints are maintained in the openMM integrator. 
-        platform = ('CPU') string, openMM name for the platform you are running on.
 
     output:
         returns top, openmm/parmEd system with coordinates after minimization
@@ -111,8 +108,7 @@ def load_and_minimize(topFile, groFile, maxIt,
     integrator.setConstraintTolerance(IntTol)
 
     print "\tAssigning platform:", platform
-    Platform = mm.Platform.getPlatformByName(platform)
-    simulation = run_minimize(top, system, integrator, EnTol, Platform, maxIt)
+    simulation = run_minimize(top, system, integrator, EnTol, maxIt)
     
     # Save Final positions
     print "\tSaving final positions of OpenMM Minimization to %s ... " % output
