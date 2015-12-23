@@ -7,6 +7,15 @@ from simtk.openmm import app
 import parmed
 from parmed import unit as u
 
+# Check parmed version, quit if not 2.0.4 or newer
+try:
+    ver = parmed.version
+    if ver < (2,0,4):
+        raise RuntimeError("ParmEd is too old, please upgrade to 2.0.4 or later")
+except:
+    oldParmEd = Exception("ParmEd is too old, please upgrade to 2.0.4 or later")
+    raise oldParmEd
+
 """
 Written to work around the GROMACS minimizer that is getting consistently stuck. It uses methods from ParmEd and OpenMM to read in GROMACS topology and coordinate files. Do a minimization and then writes out a coordinate file for the minimized system. 
 
