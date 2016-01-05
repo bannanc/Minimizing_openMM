@@ -191,7 +191,7 @@ if __name__ == '__main__':
 
     parser.add_option('-p','--platform',
             default = 'CPU',
-            help = "string, openMM name for the platform you are using",
+            help = "string, openMM name for the platform you are using, temporarily out of use because it was causing issues on our computing cluster",
             dest = 'platform')
 
     (opt, args) = parser.parse_args()
@@ -205,5 +205,5 @@ if __name__ == '__main__':
     if opt.maxIt == None:
         parser.error("ERROR: Max iterations was not provided and is required")
 
-    load_and_minimize(opt.top, opt.gro, opt.maxIt, opt.output, opt.EnTol, opt.temperature, opt.friction, opt.timestep, opt.cutOff, opt.IntTol, opt.platform)
+    load_and_minimize(opt.top, opt.gro, opt.maxIt, opt.output, opt.EnTol, opt.temperature, opt.friction, opt.timestep, opt.cutOff, opt.IntTol)
     
