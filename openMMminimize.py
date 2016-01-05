@@ -116,7 +116,7 @@ def load_and_minimize(topFile, groFile, maxIt,
         timestep * u.femtosecond)
     integrator.setConstraintTolerance(IntTol)
 
-    print "\tAssigning platform:", platform
+    # print "\tAssigning platform:", platform
     simulation = run_minimize(top, system, integrator, EnTol, maxIt)
     
     # Save Final positions
